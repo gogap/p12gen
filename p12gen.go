@@ -1,10 +1,13 @@
 package p12gen
 
 import (
+	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 
 	"github.com/chr4/pwgen"
@@ -91,7 +94,10 @@ func (p *P12Gen) CreateCertificate(caName, caPassword string, certTemplate *x509
 		}
 	}
 
-	caKey, err := x509.ParsePKCS1PrivateKey(keyData)
+	caKey, err := parsePrivateKey(keyData)
+	if err != nil {
+		return
+	}
 
 	if err != nil {
 		return
@@ -142,6 +148,48 @@ func (p *P12Gen) CreateCertificateAsync(caName, caPassword string, certTemplate 
 	}(caName, caPassword, certTemplate, callbacks...)
 }
 
+func PEMToP12(certData, keyData []byte, keyPassword, p12Password string) (p12Data []byte, err error) {
+
+	certs, err := loadCerts(certData)
+	if err != nil {
+		return
+	}
+
+	if len(certs) == 0 {
+		err = errors.New("none cert parsed")
+		return
+	}
+
+	keyPEMBlock, _ := pem.Decode(keyData)
+
+	if keyPEMBlock == nil || len(keyPEMBlock.Bytes) == 0 {
+		err = errors.New("parse key file data failure")
+		return
+	}
+
+	keyBytes := keyPEMBlock.Bytes
+
+	if x509.IsEncryptedPEMBlock(keyPEMBlock) {
+		keyBytes, err = x509.DecryptPEMBlock(keyPEMBlock, []byte(keyPassword))
+		if err != nil {
+			return
+		}
+	}
+
+	privateKey, err := parsePrivateKey(keyBytes)
+	if err != nil {
+		return
+	}
+
+	p12Data, err = pkcs12.Encode(rand.Reader, privateKey, certs[0], nil, p12Password)
+
+	if err != nil {
+		return
+	}
+
+	return
+}
+
 func loadCerts(data []byte) (certs []*x509.Certificate, err error) {
 	var pemDatas []byte
 
@@ -166,4 +214,23 @@ func loadCerts(data []byte) (certs []*x509.Certificate, err error) {
 	certs = parsedCerts
 
 	return
+}
+
+func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
+	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
+		switch key := key.(type) {
+		case *rsa.PrivateKey, *ecdsa.PrivateKey:
+			return key, nil
+		default:
+			return nil, errors.New("p12gen: found unknown private key type in PKCS#8 wrapping")
+		}
+	}
+	if key, err := x509.ParseECPrivateKey(der); err == nil {
+		return key, nil
+	}
+
+	return nil, errors.New("p12gen: failed to parse private key")
 }

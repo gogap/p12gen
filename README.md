@@ -1,7 +1,10 @@
 p12gen
 ======
 
-### Example
+### Examples
+
+
+#### Generate private p12 cert and sign by ca cert
 
 ```go
 package main
@@ -81,7 +84,65 @@ func main() {
 ```
 
 
+#### Combine pem cert and key into p12
+
+```
+package main
+
+import (
+	"fmt"
+	"io/ioutil"
+
+	"github.com/gogap/p12gen"
+)
+
+func main() {
+	var err error
+
+	defer func() {
+		if err != nil {
+			fmt.Println("ERR:", err)
+			return
+		}
+	}()
+
+	certData, err := ioutil.ReadFile("zeal.crt")
+	if err != nil {
+		return
+	}
+
+	keyData, err := ioutil.ReadFile("zeal.key")
+	if err != nil {
+		return
+	}
+
+	p12Data, err := p12gen.PEMToP12(certData, keyData, "111111", "123456")
+	if err != nil {
+		return
+	}
+
+	ioutil.WriteFile("zeal.p12", p12Data, 0644)
+}
+
+```
+
+
 ### Tips
+
+if your key file have password, it should be looks like:
+
+```
+-----BEGIN RSA PRIVATE KEY-----
+Proc-Type: 4,ENCRYPTED
+DEK-Info: DES-CBC,4A831344AE3B61AF
+
+NIa85byEwKQ4QZSJOWMNe8SMbqXLPCVAGbWIOgMQZ/OjWF3A/ZzD0C4JlmUpuDM+
+b7+UGuh//obxPJEEn9W93g0zDJnmXCv1co5xbBgZ/zK0vpiQTCsNWOz9vl6u5Wzs
+......
+-----END RSA PRIVATE KEY-----
+```
+
+> It must be have headers
 
 **Add password for rsa key**
 
