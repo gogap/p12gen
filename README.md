@@ -86,7 +86,7 @@ func main() {
 
 #### Combine pem cert and key into p12
 
-```
+```go
 package main
 
 import (
